@@ -1,8 +1,0 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "app.netlify.lgusmartattendancek.twa",
-        "sha256_cert_fingerprints": ["A0:09:C2:19:D5:D7:2D:4D:A8:8E:30:99:09:4C:86:9E:94:20:DC:29:16:85:74:B0:BA:0A:BF:DF:18:91:0C:BC"]
-      }
-    }]
