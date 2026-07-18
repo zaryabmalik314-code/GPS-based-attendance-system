@@ -6,12 +6,13 @@ from typing import List, Optional
 import secrets
 
 from . import models, schemas
-from .database import engine, get_db
+from .database import engine, get_db, run_simple_migrations
 from .geofence import pick_best_reading, check_location
 from .face_verify import verify_face, embedding_to_str
 from .auth import hash_pin, verify_pin, hash_password, verify_password
 
 models.Base.metadata.create_all(bind=engine)
+run_simple_migrations()
 
 app = FastAPI(title="SmartAttend API")
 
