@@ -24,10 +24,17 @@ async def on_startup():
     manager.set_loop(asyncio.get_running_loop())
 
 
-# TODO: lock this down to your actual frontend origin before going live
+# Locked to actual known frontend origins — GitHub Pages (teacher app +
+# admin dashboard, same host) and the Netlify fallback used during testing.
+# Add any new real domain here before pointing a frontend at this backend.
+ALLOWED_ORIGINS = [
+    "https://zaryabmalik314-code.github.io",
+    "https://preeminent-kulfi-f8576a.netlify.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
