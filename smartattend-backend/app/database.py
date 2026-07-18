@@ -40,13 +40,25 @@ def run_simple_migrations():
     from sqlalchemy import inspect, text
 
     inspector = inspect(engine)
-    if "faculty" not in inspector.get_table_names():
-        return  # table doesn't exist yet — create_all will make it fresh, no migration needed
-
-    existing_columns = {col["name"] for col in inspector.get_columns("faculty")}
+    table_names = inspector.get_table_names()
 
     with engine.connect() as conn:
-        if "profile_photo" not in existing_columns:
-            conn.execute(text("ALTER TABLE faculty ADD COLUMN profile_photo TEXT"))
-            conn.commit()
-            print("[migration] Added missing column: faculty.profile_photo")
+        if "faculty" in table_names:
+            existing_columns = {col["name"] for col in inspector.get_columns("faculty")}
+            if "profile_photo" not in existing_columns:
+                conn.execute(text("ALTER TABLE faculty ADD COLUMN profile_photo TEXT"))
+                conn.commit()
+                print("[migration] Added missing column: faculty.profile_photo")
+
+        if "attendance_records" in table_names:
+            existing_columns = {col["name"] for col in inspector.get_columns("attendance_records")}
+            if "flagged_suspicious" not in existing_columns:
+                conn.execute(text(
+                    "ALTER TABLE attendance_records ADD COLUMN flagged_suspicious BOOLEAN NOT NULL DEFAULT FALSE"
+                ))
+                conn.commit()
+                print("[migration] Added missing column: attendance_records.flagged_suspicious")
+            if "flag_reason" not in existing_columns:
+                conn.execute(text("ALTER TABLE attendance_records ADD COLUMN flag_reason TEXT"))
+                conn.commit()
+                print("[migration] Added missing column: attendance_records.flag_reason")
