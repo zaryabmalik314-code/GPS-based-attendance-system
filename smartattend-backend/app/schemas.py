@@ -14,6 +14,7 @@ class CheckInRequest(BaseModel):
     gps_readings: List[GPSReading]  # send 3-5 readings from frontend, backend picks best
     wifi_ssid: Optional[str] = None
     face_embedding: List[float]  # live capture descriptor, same length as enrolled one
+    captured_at: Optional[datetime] = None  # for offline-queued check-ins — see main.py validation
 
 
 class CheckInResponse(BaseModel):
@@ -88,6 +89,7 @@ class CheckOutRequest(BaseModel):
     gps_readings: List[GPSReading]
     wifi_ssid: Optional[str] = None
     face_embedding: List[float]
+    captured_at: Optional[datetime] = None  # for offline-queued check-outs
 
 
 class AttendanceOut(BaseModel):
