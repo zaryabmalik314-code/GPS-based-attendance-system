@@ -50,6 +50,33 @@ def get_or_create_leave_balance(db: Session, faculty_id: int) -> models.LeaveBal
     return balance
 
 
+MAX_OFFLINE_QUEUE_HOURS = 24  # how far in the past a queued offline check-in's captured_at can be
+CLOCK_SKEW_TOLERANCE_MINUTES = 2  # small allowance for device clock drift
+
+
+def resolve_record_timestamp(captured_at: Optional[datetime]) -> datetime:
+    """
+    Offline-queued check-ins send the ORIGINAL capture time (when the
+    teacher actually scanned, before connectivity returned), so late-arrival
+    and movement calculations stay fair — not penalized by sync delay.
+
+    Validates captured_at against abuse/clock issues:
+      - more than a couple minutes in the future -> untrusted, ignore it
+      - more than MAX_OFFLINE_QUEUE_HOURS in the past -> too old to be a
+        reasonable offline queue delay, ignore it
+    Falls back to the server's current time in either case.
+    """
+    if captured_at is None:
+        return datetime.utcnow()
+
+    now = datetime.utcnow()
+    if captured_at > now + timedelta(minutes=CLOCK_SKEW_TOLERANCE_MINUTES):
+        return now
+    if captured_at < now - timedelta(hours=MAX_OFFLINE_QUEUE_HOURS):
+        return now
+    return captured_at
+
+
 def check_movement_against_last_record(db: Session, faculty_id: int, new_lat: float, new_lng: float, new_time: datetime) -> dict:
     """
     Looks up this faculty's most recent attendance record (check-in or
@@ -350,7 +377,7 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
         status = "present"
 
     # 5. Flag (don't block) if travel since last known location was implausibly fast
-    now = datetime.utcnow()
+    now = resolve_record_timestamp(payload.captured_at)
     movement_check = check_movement_against_last_record(
         db, faculty.id, best_reading.latitude, best_reading.longitude, now
     )
@@ -481,7 +508,7 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
     else:
         status = "present"  # "present" here just means "exit successfully logged"
 
-    now = datetime.utcnow()
+    now = resolve_record_timestamp(payload.captured_at)
     movement_check = check_movement_against_last_record(
         db, faculty.id, best_reading.latitude, best_reading.longitude, now
     )
