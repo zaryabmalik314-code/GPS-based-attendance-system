@@ -16,6 +16,7 @@ class Faculty(Base):
     face_embedding = Column(Text, nullable=False)
     pin_hash = Column(String, nullable=False)  # bcrypt hash of login PIN
     approval_status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
+    profile_photo = Column(Text, nullable=True)  # base64-encoded image (data URL), synced across devices
     created_at = Column(DateTime, default=datetime.utcnow)
 
     attendance_records = relationship("AttendanceRecord", back_populates="faculty")
