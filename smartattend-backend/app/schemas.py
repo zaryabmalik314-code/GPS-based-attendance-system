@@ -56,6 +56,17 @@ class LoginResponse(BaseModel):
     faculty: Optional[FacultyOut] = None
 
 
+class ReEnrollFaceRequest(BaseModel):
+    teacher_id: str
+    pin: str
+    face_embedding: List[float]  # new 128-d descriptor to replace the old one
+
+
+class ReEnrollFaceResponse(BaseModel):
+    status: str  # "ok" | "invalid_credentials" | "not_approved"
+    faculty: Optional[FacultyOut] = None
+
+
 class ApprovalRequest(BaseModel):
     approval_status: str  # "approved" | "rejected"
 
