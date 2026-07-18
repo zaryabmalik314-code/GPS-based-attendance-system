@@ -37,6 +37,29 @@ def get_or_create_leave_balance(db: Session, faculty_id: int) -> models.LeaveBal
 
 ADMIN_SESSION_TTL_HOURS = 24
 
+# Late-arrival tracking — fixed daily start time for everyone (Pakistan local time).
+# Server timestamps are stored in UTC, so we convert before comparing.
+PKT_OFFSET_HOURS = 5  # Pakistan Standard Time is UTC+5, no daylight saving
+EXPECTED_ARRIVAL_HOUR = 8   # 8:00 AM local — actual campus start time
+EXPECTED_ARRIVAL_MINUTE = 0
+LATE_GRACE_MINUTES = 10  # arriving up to 10 min after 8:00 doesn't count as "late"
+
+
+def compute_late_minutes(utc_timestamp: datetime) -> int:
+    """
+    Returns how many minutes past the 8:00 AM (+ grace period) local arrival
+    time this check-in was, or 0 if on time / early. Fixed schedule for
+    everyone — no per-teacher or per-class schedule support (yet).
+    """
+    local_time = utc_timestamp + timedelta(hours=PKT_OFFSET_HOURS)
+    expected = local_time.replace(
+        hour=EXPECTED_ARRIVAL_HOUR, minute=EXPECTED_ARRIVAL_MINUTE, second=0, microsecond=0
+    )
+    grace_deadline = expected + timedelta(minutes=LATE_GRACE_MINUTES)
+    if local_time <= grace_deadline:
+        return 0
+    return int((local_time - grace_deadline).total_seconds() // 60)
+
 
 def get_current_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> models.Admin:
     """
@@ -272,6 +295,7 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
     db.refresh(record)
 
     # Count this as an attended working day (once per calendar day, only if present)
+    # and track late-arrival minutes against the fixed 9:00 AM start time.
     if status == "present":
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         already_counted_today = (
@@ -288,6 +312,11 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
         if not already_counted_today:
             balance = get_or_create_leave_balance(db, faculty.id)
             balance.working_days_attended += 1
+
+            late_minutes = compute_late_minutes(record.timestamp)
+            if late_minutes > 0:
+                balance.late_margin_used_minutes += late_minutes
+
             db.commit()
 
     return schemas.CheckInResponse(
