@@ -336,12 +336,13 @@ def list_attendance(faculty_id: int = None, db: Session = Depends(get_db)):
         q = q.filter(models.AttendanceRecord.faculty_id == faculty_id)
     records = q.order_by(models.AttendanceRecord.timestamp.desc()).all()
 
-    faculty_names = {f.id: f.name for f in db.query(models.Faculty).all()}
+    faculty_lookup = {f.id: f for f in db.query(models.Faculty).all()}
     return [
         schemas.AttendanceOut(
             id=r.id,
             faculty_id=r.faculty_id,
-            faculty_name=faculty_names.get(r.faculty_id),
+            faculty_name=faculty_lookup.get(r.faculty_id).name if faculty_lookup.get(r.faculty_id) else None,
+            department=faculty_lookup.get(r.faculty_id).department if faculty_lookup.get(r.faculty_id) else None,
             timestamp=r.timestamp,
             latitude=r.latitude,
             longitude=r.longitude,
