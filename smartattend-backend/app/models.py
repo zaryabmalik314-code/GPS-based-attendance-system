@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -46,6 +46,11 @@ class AttendanceRecord(Base):
     status = Column(String, nullable=False)  # "present" | "rejected_location" | "rejected_face"
     notes = Column(Text, nullable=True)
     record_type = Column(String, default="check_in", nullable=False)  # "check_in" | "check_out"
+
+    # Anti-spoofing: flagged (not blocked) if the implied travel speed since
+    # this faculty's last recorded location was physically impossible.
+    flagged_suspicious = Column(Boolean, default=False, nullable=False)
+    flag_reason = Column(Text, nullable=True)
 
     faculty = relationship("Faculty", back_populates="attendance_records")
 
