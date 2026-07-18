@@ -147,6 +147,35 @@ def re_enroll_face(payload: schemas.ReEnrollFaceRequest, db: Session = Depends(g
     return schemas.ReEnrollFaceResponse(status="ok", faculty=faculty)
 
 
+MAX_PHOTO_BASE64_CHARS = 500_000  # ~375KB binary — plenty for a resized profile pic, keeps DB rows small
+
+
+@app.post("/api/faculty/upload-photo", response_model=schemas.UploadPhotoResponse)
+def upload_photo(payload: schemas.UploadPhotoRequest, db: Session = Depends(get_db)):
+    """
+    Lets a teacher upload/replace their own profile picture, synced across
+    devices via the backend instead of being stuck in one device's local
+    storage. Requires teacher_id + PIN, same pattern as re-enroll-face.
+    Frontend should resize/compress the image (e.g. to ~200x200) before
+    sending, to keep payloads small.
+    """
+    faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
+    if not faculty or not verify_pin(payload.pin, faculty.pin_hash):
+        return schemas.UploadPhotoResponse(status="invalid_credentials", faculty=None)
+
+    if faculty.approval_status != "approved":
+        return schemas.UploadPhotoResponse(status="not_approved", faculty=faculty)
+
+    if len(payload.photo_base64) > MAX_PHOTO_BASE64_CHARS:
+        return schemas.UploadPhotoResponse(status="too_large", faculty=faculty)
+
+    faculty.profile_photo = payload.photo_base64
+    db.commit()
+    db.refresh(faculty)
+
+    return schemas.UploadPhotoResponse(status="ok", faculty=faculty)
+
+
 @app.post("/api/admin/bootstrap", response_model=schemas.AdminLoginResponse)
 def bootstrap_admin(payload: schemas.AdminBootstrapRequest, db: Session = Depends(get_db)):
     """
