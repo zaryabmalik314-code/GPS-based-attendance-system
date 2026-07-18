@@ -125,6 +125,28 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     return schemas.LoginResponse(status="approved", faculty=faculty)
 
 
+@app.post("/api/auth/re-enroll-face", response_model=schemas.ReEnrollFaceResponse)
+def re_enroll_face(payload: schemas.ReEnrollFaceRequest, db: Session = Depends(get_db)):
+    """
+    Lets an already-approved teacher replace their stored face descriptor —
+    e.g. if it was captured incorrectly before, lighting was bad, or they
+    just want to refresh it. Requires teacher_id + PIN, same as login, so a
+    stranger can't overwrite someone else's biometric data.
+    """
+    faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
+    if not faculty or not verify_pin(payload.pin, faculty.pin_hash):
+        return schemas.ReEnrollFaceResponse(status="invalid_credentials", faculty=None)
+
+    if faculty.approval_status != "approved":
+        return schemas.ReEnrollFaceResponse(status="not_approved", faculty=faculty)
+
+    faculty.face_embedding = embedding_to_str(payload.face_embedding)
+    db.commit()
+    db.refresh(faculty)
+
+    return schemas.ReEnrollFaceResponse(status="ok", faculty=faculty)
+
+
 @app.post("/api/admin/bootstrap", response_model=schemas.AdminLoginResponse)
 def bootstrap_admin(payload: schemas.AdminBootstrapRequest, db: Session = Depends(get_db)):
     """
