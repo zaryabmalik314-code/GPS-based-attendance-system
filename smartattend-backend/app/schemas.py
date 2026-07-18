@@ -103,6 +103,8 @@ class AttendanceOut(BaseModel):
     face_match_score: float
     status: str
     record_type: str
+    flagged_suspicious: bool = False
+    flag_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
