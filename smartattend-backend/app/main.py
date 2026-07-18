@@ -8,7 +8,7 @@ import secrets
 
 from . import models, schemas
 from .database import engine, get_db, run_simple_migrations, SessionLocal
-from .geofence import pick_best_reading, check_location
+from .geofence import pick_best_reading, check_location, check_impossible_movement
 from .face_verify import verify_face, embedding_to_str
 from .auth import hash_pin, verify_pin, hash_password, verify_password
 from .ws_manager import manager
@@ -41,6 +41,29 @@ def get_or_create_leave_balance(db: Session, faculty_id: int) -> models.LeaveBal
         db.commit()
         db.refresh(balance)
     return balance
+
+
+def check_movement_against_last_record(db: Session, faculty_id: int, new_lat: float, new_lng: float, new_time: datetime) -> dict:
+    """
+    Looks up this faculty's most recent attendance record (check-in or
+    check-out, any status) and checks whether traveling from there to the
+    new location in the elapsed time was physically plausible. Returns the
+    same shape as check_impossible_movement — {"flagged", "reason", "speed_kmh"}.
+    If there's no prior record, nothing to compare against, so not flagged.
+    """
+    last_record = (
+        db.query(models.AttendanceRecord)
+        .filter(models.AttendanceRecord.faculty_id == faculty_id)
+        .order_by(models.AttendanceRecord.timestamp.desc())
+        .first()
+    )
+    if not last_record:
+        return {"flagged": False, "reason": None, "speed_kmh": None}
+
+    return check_impossible_movement(
+        last_record.latitude, last_record.longitude, last_record.timestamp,
+        new_lat, new_lng, new_time,
+    )
 
 
 ADMIN_SESSION_TTL_HOURS = 24
@@ -319,9 +342,15 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
     else:
         status = "present"
 
+    # 5. Flag (don't block) if travel since last known location was implausibly fast
+    now = datetime.utcnow()
+    movement_check = check_movement_against_last_record(
+        db, faculty.id, best_reading.latitude, best_reading.longitude, now
+    )
+
     record = models.AttendanceRecord(
         faculty_id=faculty.id,
-        timestamp=datetime.utcnow(),
+        timestamp=now,
         latitude=best_reading.latitude,
         longitude=best_reading.longitude,
         gps_accuracy=best_reading.accuracy,
@@ -332,6 +361,8 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
         status=status,
         notes=location_check["reason"],
         record_type="check_in",
+        flagged_suspicious=movement_check["flagged"],
+        flag_reason=movement_check["reason"],
     )
     db.add(record)
     db.commit()
@@ -374,6 +405,8 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
             "timestamp": record.timestamp.isoformat(),
             "face_match_score": face_result["score"],
             "distance_to_boundary_m": location_check["distance_to_boundary_m"],
+            "flagged_suspicious": movement_check["flagged"],
+            "flag_reason": movement_check["reason"],
         },
     })
 
@@ -409,6 +442,8 @@ def list_attendance(faculty_id: int = None, db: Session = Depends(get_db)):
             face_match_score=r.face_match_score,
             status=r.status,
             record_type=r.record_type,
+            flagged_suspicious=r.flagged_suspicious,
+            flag_reason=r.flag_reason,
         )
         for r in records
     ]
@@ -439,9 +474,14 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
     else:
         status = "present"  # "present" here just means "exit successfully logged"
 
+    now = datetime.utcnow()
+    movement_check = check_movement_against_last_record(
+        db, faculty.id, best_reading.latitude, best_reading.longitude, now
+    )
+
     record = models.AttendanceRecord(
         faculty_id=faculty.id,
-        timestamp=datetime.utcnow(),
+        timestamp=now,
         latitude=best_reading.latitude,
         longitude=best_reading.longitude,
         gps_accuracy=best_reading.accuracy,
@@ -452,6 +492,8 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
         status=status,
         notes=location_check["reason"],
         record_type="check_out",
+        flagged_suspicious=movement_check["flagged"],
+        flag_reason=movement_check["reason"],
     )
     db.add(record)
     db.commit()
@@ -469,6 +511,8 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
             "timestamp": record.timestamp.isoformat(),
             "face_match_score": face_result["score"],
             "distance_to_boundary_m": location_check["distance_to_boundary_m"],
+            "flagged_suspicious": movement_check["flagged"],
+            "flag_reason": movement_check["reason"],
         },
     })
 
