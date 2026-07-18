@@ -41,9 +41,21 @@ class FacultyOut(BaseModel):
     teacher_id: str
     department: Optional[str] = None
     approval_status: str
+    profile_photo: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class UploadPhotoRequest(BaseModel):
+    teacher_id: str
+    pin: str
+    photo_base64: str  # data URL or raw base64 string, e.g. "data:image/jpeg;base64,..."
+
+
+class UploadPhotoResponse(BaseModel):
+    status: str  # "ok" | "invalid_credentials" | "not_approved" | "too_large"
+    faculty: Optional[FacultyOut] = None
 
 
 class LoginRequest(BaseModel):
