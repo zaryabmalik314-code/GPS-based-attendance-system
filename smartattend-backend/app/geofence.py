@@ -94,3 +94,42 @@ def check_location(reading: GPSReading) -> dict:
         return {"allowed": True, "reason": "within_buffer_zone", "distance_to_boundary_m": dist}
 
     return {"allowed": False, "reason": "outside_boundary", "distance_to_boundary_m": dist}
+
+
+# Anti-GPS-spoofing: impossible-movement detection. If a teacher's last
+# recorded location and this new one, given the time elapsed, imply a travel
+# speed no real vehicle could achieve, flag it for admin review. This does
+# NOT block the check-in — GPS drift near boundaries already causes enough
+# false-positive risk without also blocking on this, so it's a flag, not a gate.
+MAX_PLAUSIBLE_SPEED_KMH = 160.0  # generous — covers fast highway driving, catches teleportation
+MIN_MINUTES_TO_CHECK = 1.0  # ignore near-simultaneous readings (avoids division-by-near-zero noise)
+MAX_HOURS_SINCE_LAST_TO_CHECK = 12.0  # long gaps make speed comparison meaningless, skip those
+
+
+def check_impossible_movement(
+    prev_lat: float, prev_lng: float, prev_time, new_lat: float, new_lng: float, new_time
+) -> dict:
+    """
+    Returns {"flagged": bool, "reason": str | None, "speed_kmh": float | None}
+    based on implied travel speed between two recorded points.
+    """
+    elapsed_hours = (new_time - prev_time).total_seconds() / 3600.0
+    elapsed_minutes = elapsed_hours * 60
+
+    if elapsed_minutes < MIN_MINUTES_TO_CHECK or elapsed_hours > MAX_HOURS_SINCE_LAST_TO_CHECK:
+        return {"flagged": False, "reason": None, "speed_kmh": None}
+
+    distance_km = haversine_m(prev_lat, prev_lng, new_lat, new_lng) / 1000.0
+    speed_kmh = distance_km / elapsed_hours
+
+    if speed_kmh > MAX_PLAUSIBLE_SPEED_KMH:
+        return {
+            "flagged": True,
+            "reason": (
+                f"implied speed {speed_kmh:.0f} km/h over {distance_km:.1f}km "
+                f"in {elapsed_minutes:.1f}min exceeds plausible travel speed"
+            ),
+            "speed_kmh": speed_kmh,
+        }
+
+    return {"flagged": False, "reason": None, "speed_kmh": speed_kmh}
