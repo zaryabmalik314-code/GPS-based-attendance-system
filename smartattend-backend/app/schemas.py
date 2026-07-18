@@ -94,6 +94,7 @@ class AttendanceOut(BaseModel):
     id: int
     faculty_id: int
     faculty_name: Optional[str] = None
+    department: Optional[str] = None
     timestamp: datetime
     latitude: float
     longitude: float
