@@ -1,20 +1,28 @@
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
+import asyncio
 import secrets
 
 from . import models, schemas
-from .database import engine, get_db, run_simple_migrations
+from .database import engine, get_db, run_simple_migrations, SessionLocal
 from .geofence import pick_best_reading, check_location
 from .face_verify import verify_face, embedding_to_str
 from .auth import hash_pin, verify_pin, hash_password, verify_password
+from .ws_manager import manager
 
 models.Base.metadata.create_all(bind=engine)
 run_simple_migrations()
 
 app = FastAPI(title="SmartAttend API")
+
+
+@app.on_event("startup")
+async def on_startup():
+    manager.set_loop(asyncio.get_running_loop())
+
 
 # TODO: lock this down to your actual frontend origin before going live
 app.add_middleware(
@@ -78,6 +86,41 @@ def get_current_admin(authorization: Optional[str] = Header(None), db: Session =
     if not admin:
         raise HTTPException(status_code=401, detail="Admin account not found")
     return admin
+
+
+def validate_admin_token(token: str, db: Session) -> Optional[models.Admin]:
+    """Shared validation logic used by both the HTTP admin-auth dependency and the WebSocket endpoint."""
+    session = db.query(models.AdminSession).filter(models.AdminSession.token == token).first()
+    if not session or session.expires_at < datetime.utcnow():
+        return None
+    return db.query(models.Admin).filter(models.Admin.id == session.admin_id).first()
+
+
+@app.websocket("/ws/admin")
+async def admin_websocket(websocket: WebSocket, token: str):
+    """
+    Admin dashboard connects here (after logging in) to receive live
+    attendance events instead of needing to refresh the page. Pass the
+    admin access token as a query param: wss://.../ws/admin?token=<token>
+    """
+    db = SessionLocal()
+    try:
+        admin = validate_admin_token(token, db)
+    finally:
+        db.close()
+
+    if not admin:
+        await websocket.close(code=4401)  # custom code — invalid/expired token
+        return
+
+    await manager.connect(websocket)
+    try:
+        while True:
+            # We don't expect the client to send anything meaningful, but we
+            # need to keep awaiting to detect disconnects.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 
 @app.get("/")
@@ -319,6 +362,21 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
 
             db.commit()
 
+    manager.broadcast_threadsafe({
+        "event": "attendance",
+        "data": {
+            "record_id": record.id,
+            "faculty_id": faculty.id,
+            "faculty_name": faculty.name,
+            "department": faculty.department,
+            "record_type": "check_in",
+            "status": status,
+            "timestamp": record.timestamp.isoformat(),
+            "face_match_score": face_result["score"],
+            "distance_to_boundary_m": location_check["distance_to_boundary_m"],
+        },
+    })
+
     return schemas.CheckInResponse(
         status=status,
         reason=location_check["reason"] if status != "present" else face_result.get("reason"),
@@ -398,6 +456,21 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
     db.add(record)
     db.commit()
     db.refresh(record)
+
+    manager.broadcast_threadsafe({
+        "event": "attendance",
+        "data": {
+            "record_id": record.id,
+            "faculty_id": faculty.id,
+            "faculty_name": faculty.name,
+            "department": faculty.department,
+            "record_type": "check_out",
+            "status": status,
+            "timestamp": record.timestamp.isoformat(),
+            "face_match_score": face_result["score"],
+            "distance_to_boundary_m": location_check["distance_to_boundary_m"],
+        },
+    })
 
     return schemas.CheckInResponse(
         status=status,
