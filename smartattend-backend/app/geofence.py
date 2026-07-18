@@ -6,17 +6,14 @@ import math
 from typing import List, Tuple
 from .schemas import GPSReading
 
-# TODO: replace with your actual 16 campus boundary points (lat, lng)
+# TEMPORARY test boundary — ~150m box around a test coordinate the user
+# provided (31.490827, 74.4080266) for end-to-end testing. Replace with the
+# real 16-point campus boundary once available.
 CAMPUS_BOUNDARY: List[Tuple[float, float]] = [
-    (31.5204, 74.3587),
-    (31.5210, 74.3590),
-    (31.5215, 74.3600),
-    (31.5210, 74.3610),
-    (31.5200, 74.3612),
-    (31.5195, 74.3605),
-    (31.5192, 74.3598),
-    (31.5196, 74.3590),
-    # ... fill remaining points from your SCEMS boundary data
+    (31.492174, 74.406446),
+    (31.492174, 74.409607),
+    (31.489480, 74.409607),
+    (31.489480, 74.406446),
 ]
 
 MAX_ACCEPTABLE_ACCURACY_M = 30.0  # reject readings noisier than this
