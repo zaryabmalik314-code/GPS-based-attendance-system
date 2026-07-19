@@ -3393,10 +3393,16 @@ document.addEventListener('DOMContentLoaded', function(){
     var sp=document.getElementById('introSplash');
     if(sp)sp.classList.add('hide');
   }, 900);
+
+  // Register service worker for installable PWA / APK support
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then(function(reg) {
+      console.log('Service Worker registered successfully with scope:', reg.scope);
+    }).catch(function(err) {
+      console.warn('Service Worker registration failed:', err);
+    });
+  }
 });
-
-
-
 </script>
 </body>
 </html>
