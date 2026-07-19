@@ -6,14 +6,30 @@ import math
 from typing import List, Tuple
 from .schemas import GPSReading
 
-# TEMPORARY test boundary — ~150m box around a test coordinate the user
-# provided (31.490827, 74.4080266) for end-to-end testing. Replace with the
-# real 16-point campus boundary once available.
+# Real campus boundary — Lahore Garrison University, DHA Phase 6, Lahore.
+# Traced from actual satellite imagery of the campus perimeter wall (21 points).
 CAMPUS_BOUNDARY: List[Tuple[float, float]] = [
-    (31.492174, 74.406446),
-    (31.492174, 74.409607),
-    (31.489480, 74.409607),
-    (31.489480, 74.406446),
+    (31.463801, 74.441493),
+    (31.464043, 74.441724),
+    (31.463901, 74.441514),
+    (31.464234, 74.441990),
+    (31.464446, 74.442265),
+    (31.464764, 74.442671),
+    (31.464844, 74.442842),
+    (31.464454, 74.443324),
+    (31.464066, 74.443752),
+    (31.463730, 74.444093),
+    (31.463483, 74.444375),
+    (31.463255, 74.444610),
+    (31.463003, 74.444890),
+    (31.462979, 74.444712),
+    (31.463154, 74.444091),
+    (31.463268, 74.443655),
+    (31.463371, 74.443291),
+    (31.463398, 74.442963),
+    (31.463580, 74.442352),
+    (31.463656, 74.442015),
+    (31.463745, 74.441712),
 ]
 
 MAX_ACCEPTABLE_ACCURACY_M = 30.0  # reject readings noisier than this
