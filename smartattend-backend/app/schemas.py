@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from datetime import datetime
+from pydantic import BaseModel, field_serializer
+from datetime import datetime, timezone
 from typing import List, Optional
 
 
@@ -107,6 +107,16 @@ class AttendanceOut(BaseModel):
     record_type: str
     flagged_suspicious: bool = False
     flag_reason: Optional[str] = None
+
+    # DB timestamps are stored naive (no tzinfo) but are always UTC (written
+    # via datetime.utcnow()). Without an explicit offset, clients parse the
+    # string as their OWN local time instead of UTC, silently shifting every
+    # displayed time. Stamp the UTC offset on the way out so it's unambiguous.
+    @field_serializer('timestamp')
+    def serialize_timestamp(self, dt: datetime, _info):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
 
     class Config:
         from_attributes = True
