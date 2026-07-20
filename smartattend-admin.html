@@ -784,7 +784,7 @@ function fmtDate(ts) {
   if (!ts) return '—';
   const d = new Date(ts);
   if (isNaN(d)) return ts;
-  return d.toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  return d.toLocaleString('en-US', { timeZone: 'Asia/Karachi', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
 }
 
 /* =========================================================================
