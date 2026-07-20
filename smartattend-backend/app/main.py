@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import asyncio
 import secrets
@@ -52,6 +52,14 @@ def get_or_create_leave_balance(db: Session, faculty_id: int) -> models.LeaveBal
 
 MAX_OFFLINE_QUEUE_HOURS = 24  # how far in the past a queued offline check-in's captured_at can be
 CLOCK_SKEW_TOLERANCE_MINUTES = 2  # small allowance for device clock drift
+
+
+def to_utc_iso(dt: datetime) -> str:
+    """Serialize a stored (naive, but always-UTC) datetime with an explicit
+    UTC offset, so clients don't misparse it as their own local time."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 
 def resolve_record_timestamp(captured_at: Optional[datetime]) -> datetime:
@@ -436,7 +444,7 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
             "department": faculty.department,
             "record_type": "check_in",
             "status": status,
-            "timestamp": record.timestamp.isoformat(),
+            "timestamp": to_utc_iso(record.timestamp),
             "face_match_score": face_result["score"],
             "distance_to_boundary_m": location_check["distance_to_boundary_m"],
             "flagged_suspicious": movement_check["flagged"],
@@ -542,7 +550,7 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
             "department": faculty.department,
             "record_type": "check_out",
             "status": status,
-            "timestamp": record.timestamp.isoformat(),
+            "timestamp": to_utc_iso(record.timestamp),
             "face_match_score": face_result["score"],
             "distance_to_boundary_m": location_check["distance_to_boundary_m"],
             "flagged_suspicious": movement_check["flagged"],
