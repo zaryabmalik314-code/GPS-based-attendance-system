@@ -30,6 +30,7 @@ async def on_startup():
 ALLOWED_ORIGINS = [
     "https://zaryabmalik314-code.github.io",
     "https://preeminent-kulfi-f8576a.netlify.app",
+    "https://brilliant-pothos-ee9a7a.netlify.app",
 ]
 
 app.add_middleware(
