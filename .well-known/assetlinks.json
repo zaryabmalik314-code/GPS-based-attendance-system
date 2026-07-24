@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.netlify.brilliant_pothos_ee9a7a.twa",
+        "sha256_cert_fingerprints": ["26:B2:42:06:18:5F:EC:85:93:7E:5E:BF:A7:88:2D:39:F9:1A:0E:02:7C:4E:AE:8C:C0:30:43:E4:EE:CA:3E:2E"]
+      }
+    }]
