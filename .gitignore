@@ -1,0 +1,4 @@
+﻿__pycache__/
+*.pyc
+smartattend-backend/smartattend.db
+.venv/
