@@ -1428,7 +1428,7 @@ function pickEnrollFrames(frames,totalMs){
 function pickCandidateFrames(frames){
   if(!frames.length)return[];
   var maxSharp=frames.reduce(function(m,f){return Math.max(m,f.sharp);},0);
-  var threshold=maxSharp*0.55;
+var threshold=maxSharp*0.3;  // more lenient
   var kept=frames.filter(function(f){return f.sharp>=threshold;});
   if(!kept.length)kept=frames; // fail open — never send zero frames
   return kept.map(function(f){return f.dataUrl;});
