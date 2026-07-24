@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
+﻿from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -12,8 +12,11 @@ class Faculty(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     teacher_id = Column(String, unique=True, index=True, nullable=False)  # roll number / employee ID, used for login
     department = Column(String, nullable=True)
-    # Face embedding stored as comma-separated floats (e.g. face-api.js 128-d descriptor)
-    face_embedding = Column(Text, nullable=False)
+    # Up to 3 ArcFace (InsightFace) embeddings, one per angle bucket
+    # (left/center/right), stored as a JSON-encoded list of float lists.
+    # Legacy rows may still hold a single comma-separated face-api.js
+    # descriptor — face_verify.str_to_embeddings() handles both formats.
+    face_embeddings = Column(Text, nullable=False)
     pin_hash = Column(String, nullable=False)  # bcrypt hash of login PIN
     approval_status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
     profile_photo = Column(Text, nullable=True)  # base64-encoded image (data URL), synced across devices

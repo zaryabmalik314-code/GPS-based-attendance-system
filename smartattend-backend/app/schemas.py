@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_serializer
+﻿from pydantic import BaseModel, field_serializer
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -13,7 +13,7 @@ class CheckInRequest(BaseModel):
     faculty_id: int
     gps_readings: List[GPSReading]  # send 3-5 readings from frontend, backend picks best
     wifi_ssid: Optional[str] = None
-    face_embedding: List[float]  # live capture descriptor, same length as enrolled one
+    face_images: List[str]  # base64 candidate frames (from ~5s video, client-filtered for blur); backend picks the best one and embeds it
     captured_at: Optional[datetime] = None  # for offline-queued check-ins — see main.py validation
 
 
@@ -31,7 +31,7 @@ class FacultyEnrollRequest(BaseModel):
     email: str
     teacher_id: str
     department: Optional[str] = None
-    face_embedding: List[float]
+    face_images: List[str]  # base64 frames, one per angle bucket (left/center/right), max 3
     pin: str  # 4-6 digit PIN the teacher will use to log in
 
 
@@ -72,7 +72,7 @@ class LoginResponse(BaseModel):
 class ReEnrollFaceRequest(BaseModel):
     teacher_id: str
     pin: str
-    face_embedding: List[float]  # new 128-d descriptor to replace the old one
+    face_images: List[str]  # base64 frames, one per angle bucket, replaces all stored embeddings
 
 
 class ReEnrollFaceResponse(BaseModel):
@@ -88,7 +88,7 @@ class CheckOutRequest(BaseModel):
     faculty_id: int
     gps_readings: List[GPSReading]
     wifi_ssid: Optional[str] = None
-    face_embedding: List[float]
+    face_images: List[str]  # base64 candidate frames, same as check-in
     captured_at: Optional[datetime] = None  # for offline-queued check-outs
 
 

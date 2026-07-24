@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect
+﻿from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
@@ -9,7 +9,7 @@ import secrets
 from . import models, schemas
 from .database import engine, get_db, run_simple_migrations, SessionLocal
 from .geofence import pick_best_reading, check_location, check_impossible_movement
-from .face_verify import verify_face, embedding_to_str
+from .face_verify import verify_face_from_frames, enroll_from_frames, embeddings_to_str
 from .auth import hash_pin, verify_pin, hash_password, verify_password
 from .ws_manager import manager
 
@@ -24,7 +24,7 @@ async def on_startup():
     manager.set_loop(asyncio.get_running_loop())
 
 
-# Locked to actual known frontend origins — GitHub Pages (teacher app +
+# Locked to actual known frontend origins â€” GitHub Pages (teacher app +
 # admin dashboard, same host) and the Netlify fallback used during testing.
 # Add any new real domain here before pointing a frontend at this backend.
 ALLOWED_ORIGINS = [
@@ -67,7 +67,7 @@ def resolve_record_timestamp(captured_at: Optional[datetime]) -> datetime:
     """
     Offline-queued check-ins send the ORIGINAL capture time (when the
     teacher actually scanned, before connectivity returned), so late-arrival
-    and movement calculations stay fair — not penalized by sync delay.
+    and movement calculations stay fair â€” not penalized by sync delay.
 
     Validates captured_at against abuse/clock issues:
       - more than a couple minutes in the future -> untrusted, ignore it
@@ -91,7 +91,7 @@ def check_movement_against_last_record(db: Session, faculty_id: int, new_lat: fl
     Looks up this faculty's most recent attendance record (check-in or
     check-out, any status) and checks whether traveling from there to the
     new location in the elapsed time was physically plausible. Returns the
-    same shape as check_impossible_movement — {"flagged", "reason", "speed_kmh"}.
+    same shape as check_impossible_movement â€” {"flagged", "reason", "speed_kmh"}.
     If there's no prior record, nothing to compare against, so not flagged.
     """
     last_record = (
@@ -111,10 +111,10 @@ def check_movement_against_last_record(db: Session, faculty_id: int, new_lat: fl
 
 ADMIN_SESSION_TTL_HOURS = 24
 
-# Late-arrival tracking — fixed daily start time for everyone (Pakistan local time).
+# Late-arrival tracking â€” fixed daily start time for everyone (Pakistan local time).
 # Server timestamps are stored in UTC, so we convert before comparing.
 PKT_OFFSET_HOURS = 5  # Pakistan Standard Time is UTC+5, no daylight saving
-EXPECTED_ARRIVAL_HOUR = 8   # 8:00 AM local — actual campus start time
+EXPECTED_ARRIVAL_HOUR = 8   # 8:00 AM local â€” actual campus start time
 EXPECTED_ARRIVAL_MINUTE = 0
 LATE_GRACE_MINUTES = 10  # arriving up to 10 min after 8:00 doesn't count as "late"
 
@@ -123,7 +123,7 @@ def compute_late_minutes(utc_timestamp: datetime) -> int:
     """
     Returns how many minutes past the 8:00 AM (+ grace period) local arrival
     time this check-in was, or 0 if on time / early. Fixed schedule for
-    everyone — no per-teacher or per-class schedule support (yet).
+    everyone â€” no per-teacher or per-class schedule support (yet).
     """
     local_time = utc_timestamp + timedelta(hours=PKT_OFFSET_HOURS)
     expected = local_time.replace(
@@ -176,7 +176,7 @@ async def admin_websocket(websocket: WebSocket, token: str):
         db.close()
 
     if not admin:
-        await websocket.close(code=4401)  # custom code — invalid/expired token
+        await websocket.close(code=4401)  # custom code â€” invalid/expired token
         return
 
     await manager.connect(websocket)
@@ -202,12 +202,16 @@ def enroll_faculty(payload: schemas.FacultyEnrollRequest, db: Session = Depends(
     if existing:
         raise HTTPException(status_code=400, detail="Faculty with this email or teacher ID already enrolled")
 
+    enroll_result = enroll_from_frames(payload.face_images)
+    if not enroll_result["embeddings"]:
+        raise HTTPException(status_code=400, detail=f"No usable face detected in any submitted frame: {enroll_result['reason']}")
+
     faculty = models.Faculty(
         name=payload.name,
         email=payload.email,
         teacher_id=payload.teacher_id,
         department=payload.department,
-        face_embedding=embedding_to_str(payload.face_embedding),
+        face_embeddings=embeddings_to_str(enroll_result["embeddings"]),
         pin_hash=hash_pin(payload.pin),
         approval_status="pending",
     )
@@ -232,7 +236,7 @@ def approve_faculty(
     db: Session = Depends(get_db),
     admin: models.Admin = Depends(get_current_admin),
 ):
-    """Admin-only — requires a valid admin session token."""
+    """Admin-only â€” requires a valid admin session token."""
     if payload.approval_status not in ("approved", "rejected"):
         raise HTTPException(status_code=400, detail="approval_status must be 'approved' or 'rejected'")
 
@@ -261,7 +265,7 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 @app.post("/api/auth/re-enroll-face", response_model=schemas.ReEnrollFaceResponse)
 def re_enroll_face(payload: schemas.ReEnrollFaceRequest, db: Session = Depends(get_db)):
     """
-    Lets an already-approved teacher replace their stored face descriptor —
+    Lets an already-approved teacher replace their stored face descriptor â€”
     e.g. if it was captured incorrectly before, lighting was bad, or they
     just want to refresh it. Requires teacher_id + PIN, same as login, so a
     stranger can't overwrite someone else's biometric data.
@@ -273,14 +277,18 @@ def re_enroll_face(payload: schemas.ReEnrollFaceRequest, db: Session = Depends(g
     if faculty.approval_status != "approved":
         return schemas.ReEnrollFaceResponse(status="not_approved", faculty=faculty)
 
-    faculty.face_embedding = embedding_to_str(payload.face_embedding)
+    enroll_result = enroll_from_frames(payload.face_images)
+    if not enroll_result["embeddings"]:
+        raise HTTPException(status_code=400, detail=f"No usable face detected in any submitted frame: {enroll_result['reason']}")
+
+    faculty.face_embeddings = embeddings_to_str(enroll_result["embeddings"])
     db.commit()
     db.refresh(faculty)
 
     return schemas.ReEnrollFaceResponse(status="ok", faculty=faculty)
 
 
-MAX_PHOTO_BASE64_CHARS = 500_000  # ~375KB binary — plenty for a resized profile pic, keeps DB rows small
+MAX_PHOTO_BASE64_CHARS = 500_000  # ~375KB binary â€” plenty for a resized profile pic, keeps DB rows small
 
 
 @app.post("/api/faculty/upload-photo", response_model=schemas.UploadPhotoResponse)
@@ -320,7 +328,7 @@ def bootstrap_admin(payload: schemas.AdminBootstrapRequest, db: Session = Depend
     """
     existing_count = db.query(models.Admin).count()
     if existing_count > 0:
-        raise HTTPException(status_code=400, detail="An admin already exists — use the dashboard login instead")
+        raise HTTPException(status_code=400, detail="An admin already exists â€” use the dashboard login instead")
 
     admin = models.Admin(
         email=payload.email,
@@ -375,7 +383,7 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
     location_check = check_location(best_reading)
 
     # 3. Verify face
-    face_result = verify_face(payload.face_embedding, faculty.face_embedding)
+    face_result = verify_face_from_frames(payload.face_images, faculty.face_embeddings)
 
     # 4. Decide final status
     if not location_check["allowed"]:
@@ -497,7 +505,7 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
     """
     Marks the teacher's exit from campus. Same GPS + face verification as
     check-in, but does NOT log the teacher out of the app and does NOT
-    affect leave/attendance counters — it's just an exit timestamp record.
+    affect leave/attendance counters â€” it's just an exit timestamp record.
     """
     faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
     if not faculty:
@@ -508,7 +516,7 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
 
     best_reading = pick_best_reading(payload.gps_readings)
     location_check = check_location(best_reading)
-    face_result = verify_face(payload.face_embedding, faculty.face_embedding)
+    face_result = verify_face_from_frames(payload.face_images, faculty.face_embeddings)
 
     if not location_check["allowed"]:
         status = "rejected_location"
@@ -595,7 +603,7 @@ def get_leave_balance(faculty_id: int, db: Session = Depends(get_db)):
 @app.get("/api/salary", response_model=List[schemas.SalaryOut])
 def get_salary_records(faculty_id: int, db: Session = Depends(get_db)):
     """
-    Placeholder — no payroll system wired up yet. Returns whatever rows
+    Placeholder â€” no payroll system wired up yet. Returns whatever rows
     exist in salary_records for this faculty (admin dashboard would need
     to create these; nothing auto-generates them yet).
     """
@@ -620,3 +628,5 @@ def get_salary_records(faculty_id: int, db: Session = Depends(get_db)):
         )
         for r in records
     ]
+
+

@@ -1,4 +1,4 @@
-import os
+﻿import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
@@ -49,6 +49,17 @@ def run_simple_migrations():
                 conn.execute(text("ALTER TABLE faculty ADD COLUMN profile_photo TEXT"))
                 conn.commit()
                 print("[migration] Added missing column: faculty.profile_photo")
+
+            # face_embedding (single face-api.js descriptor) -> face_embeddings
+            # (JSON list of up to 3 InsightFace/ArcFace embeddings). Rename in
+            # place and carry over any existing legacy value so old enrolled
+            # faculty keep working (as a 1-item list) until they re-enroll.
+            if "face_embeddings" not in existing_columns and "face_embedding" in existing_columns:
+                conn.execute(text("ALTER TABLE faculty ADD COLUMN face_embeddings TEXT"))
+                conn.commit()
+                conn.execute(text("UPDATE faculty SET face_embeddings = face_embedding WHERE face_embeddings IS NULL"))
+                conn.commit()
+                print("[migration] Added faculty.face_embeddings and backfilled from face_embedding")
 
         if "attendance_records" in table_names:
             existing_columns = {col["name"] for col in inspector.get_columns("attendance_records")}
