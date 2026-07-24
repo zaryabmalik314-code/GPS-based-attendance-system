@@ -177,6 +177,11 @@ async def admin_websocket(websocket: WebSocket, token: str):
         db.close()
 
     if not admin:
+        # Must accept() before close(), otherwise uvicorn/websockets never
+        # completes the WS handshake and the browser just sees a raw HTTP 403
+        # instead of a proper close frame — the frontend can't tell "expired
+        # token" apart from "network blip" and retries forever.
+        await websocket.accept()
         await websocket.close(code=4401)  # custom code — invalid/expired token
         return
 
