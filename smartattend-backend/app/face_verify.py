@@ -27,7 +27,7 @@ import numpy as np
 from PIL import Image
 
 FACE_MATCH_THRESHOLD = 0.50  # cosine similarity on L2-normalized ArcFace embeddings; tune with real faculty data
-MIN_DETECTION_CONFIDENCE = 0.6
+MIN_DETECTION_CONFIDENCE = 0.4
 MIN_FACE_SIZE_PX = 80  # reject tiny/far-away faces
 
 _face_app = None
